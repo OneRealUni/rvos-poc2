@@ -2,9 +2,10 @@
 RVOS Proof of Concept -- core reasoning test.
 
 Two-agent pipeline: extract the paper's claim, then judge its novelty
-against related work retrieved from OpenAlex. Deliberately no UI, no
-database, no orchestration framework -- see RVOS_POC_Week1_Spec.md
-for why those are out of scope this week.
+against related work retrieved from OpenAlex. Orchestrated with LangGraph
+as a thin sequencing layer (see build_graph()) -- the agents' reasoning,
+retries, and error handling live entirely in the plain functions below.
+Deliberately no UI, no database, no batch/multi-paper processing.
 
 Usage:
     python rvos_poc.py path/to/paper.txt
@@ -16,10 +17,12 @@ import json
 import os
 import sys
 import time
+from typing import TypedDict
 
 import requests
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from langgraph.graph import END, START, StateGraph
 
 load_dotenv()
 
@@ -140,6 +143,45 @@ Instructions:
     )
     return _response_text(resp)
 
+
+class PipelineState(TypedDict):
+    """LangGraph state carried through the pipeline. Orchestration only --
+    the three functions above keep their own reasoning, retries, and error
+    handling unchanged; the graph just sequences them."""
+    paper_text: str
+    extracted: dict
+    related: list
+    verdict: str
+
+
+def _extract_node(state: PipelineState) -> dict:
+    print("Extracting claim...")
+    return {"extracted": extract_claim(state["paper_text"])}
+
+
+def _search_node(state: PipelineState) -> dict:
+    print("Searching OpenAlex for related work...")
+    return {"related": search_openalex(state["extracted"]["keywords"])}
+
+
+def _judge_node(state: PipelineState) -> dict:
+    print("Judging novelty...")
+    return {"verdict": judge_novelty(state["extracted"], state["related"])}
+
+
+def build_graph():
+    """Wires extract -> search -> judge as a linear LangGraph pipeline."""
+    graph = StateGraph(PipelineState)
+    graph.add_node("extract", _extract_node)
+    graph.add_node("search", _search_node)
+    graph.add_node("judge", _judge_node)
+    graph.add_edge(START, "extract")
+    graph.add_edge("extract", "search")
+    graph.add_edge("search", "judge")
+    graph.add_edge("judge", END)
+    return graph.compile()
+
+
 def run(paper_path: str):
     try:
         with open(paper_path, "r", encoding="utf-8") as f:
@@ -148,14 +190,10 @@ def run(paper_path: str):
         with open(paper_path, "r", encoding="cp1252") as f:
             paper_text = f.read()
 
-    print("Extracting claim...")
-    extracted = extract_claim(paper_text)
-
-    print("Searching OpenAlex for related work...")
-    related = search_openalex(extracted["keywords"])
-
-    print("Judging novelty...")
-    verdict = judge_novelty(extracted, related)
+    result = build_graph().invoke({"paper_text": paper_text})
+    extracted = result["extracted"]
+    related = result["related"]
+    verdict = result["verdict"]
 
     related_lines = "\n".join(f"- {w['title']} ({w['year']})" for w in related)
     report = f"""# RVOS POC report -- {os.path.basename(paper_path)}
