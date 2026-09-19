@@ -28,7 +28,7 @@ load_dotenv()
 
 client = Anthropic()  # reads ANTHROPIC_API_KEY from the environment
 MODEL = "claude-sonnet-5"  # cheap and sufficient for this step; only escalate if judgment quality is weak in your reading
-
+REQUIRED_KEYS = {"claim", "method", "result", "keywords"}
 
 def _response_text(resp) -> str:
     """Sonnet 5 can prepend a ThinkingBlock before the text block, so
@@ -68,10 +68,15 @@ PAPER TEXT:
         text = _response_text(resp)
         text = text.replace("```json", "").replace("```", "").strip()
         try:
-            return json.loads(text)
+            parsed = json.loads(text)
         except json.JSONDecodeError as e:
             last_error = e
             continue
+        missing = REQUIRED_KEYS - parsed.keys()
+        if missing:
+            last_error = ValueError(f"Model response missing required keys: {sorted(missing)}")
+            continue
+        return parsed
     raise last_error
 
 
@@ -195,7 +200,7 @@ def run(paper_path: str):
     related = result["related"]
     verdict = result["verdict"]
 
-    related_lines = "\n".join(f"- {w['title']} ({w['year']})" for w in related)
+    related_lines = "\n".join(f"[{i+1}] {w['title']} ({w['year']})" for i, w in enumerate(related))
     report = f"""# RVOS POC report -- {os.path.basename(paper_path)}
 
 ## Extracted claim

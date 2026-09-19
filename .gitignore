@@ -92,5 +92,8 @@ docs/component-content/
 # reports, which summarize/quote the same NDA material)
 Docs/Test/Bocken.txt
 Docs/Test/Radha Tucci ISPIM25.txt
-Docs/Test/Tuxci.txt
+Docs/Test/Tucci.txt
 Docs/Test/*_report.md
+
+# Local test run output
+pytest_output.txt
