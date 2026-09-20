@@ -31,6 +31,18 @@ new work -- the constraints above (no new agents, no batch processing)
 were specific to POC 2 and no longer automatically apply once a new
 increment is defined.
 
+## Review-evidence commit routine (temporary, until CI exists)
+`pytest_output.txt` and `patches/poc2-followups.patch` are committed
+directly for now instead of being produced by CI, which is why the
+`.gitignore` exclusion for `pytest_output.txt` was removed.
+- Before trusting `pytest_output.txt`, check its "Generated at commit
+  <sha>" stamp against the current `HEAD`. If they differ, rerun
+  `pytest -v | tee pytest_output.txt`, update the stamp, and recommit.
+- Backlog for POC3: replace this manual routine with a CI workflow
+  (e.g. GitHub Actions) that runs `pytest` on push. Once that exists,
+  restore the `.gitignore` exclusion and stop committing
+  `pytest_output.txt` by hand.
+
 ## What this is
 
 RVOS POC: a two-agent novelty checker for research papers. Given a paper as plain text, it judges whether the paper's

@@ -1,4 +1,4 @@
-# Generated at commit 2f6367972a70c062bd79fd5090c48100b76b9374
+# Generated at commit 58a02232de943eeb5c9433f20a06e4fe1f73fd35
 # Regenerate before trusting this as current state -- see CLAUDE.md commit routine
 
 ============================= test session starts =============================
@@ -13,4 +13,4 @@ test_rvos_poc.py::test_ispim_does_not_flag_direct_overlap PASSED         [ 50%]
 test_rvos_poc.py::test_overlap_claims_cite_a_numbered_source PASSED      [ 75%]
 test_rvos_poc.py::test_report_citation_numbers_match_related_work_list PASSED [100%]
 
-============================= 4 passed in 43.42s ==============================
+============================= 4 passed in 47.71s ==============================
