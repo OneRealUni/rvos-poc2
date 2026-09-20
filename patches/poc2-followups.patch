@@ -1,3 +1,6 @@
+# Applied in commit dea739d..5d38b11 (already merged into main -- this file
+# is kept as a review record, not a patch waiting to be applied).
+
 diff --git a/CLAUDE.md b/CLAUDE.md
 index 624f7cc..a8d97a7 100644
 --- a/CLAUDE.md
