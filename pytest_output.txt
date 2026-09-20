@@ -1,0 +1,13 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0 -- C:\Drive\Minpori\Learn\Outskill\Projects\Capstone\Dev\POC2\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Drive\Minpori\Learn\Outskill\Projects\Capstone\Dev\POC2
+plugins: anyio-4.15.1, langsmith-0.12.6
+collecting ... collected 4 items
+
+test_rvos_poc.py::test_bocken_flags_overlap_not_novel PASSED             [ 25%]
+test_rvos_poc.py::test_ispim_does_not_flag_direct_overlap PASSED         [ 50%]
+test_rvos_poc.py::test_overlap_claims_cite_a_numbered_source PASSED      [ 75%]
+test_rvos_poc.py::test_report_citation_numbers_match_related_work_list PASSED [100%]
+
+============================= 4 passed in 49.55s ==============================

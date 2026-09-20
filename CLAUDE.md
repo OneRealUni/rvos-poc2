@@ -13,10 +13,23 @@ This repo implements a validated 2-agent research-novelty POC (extract_claim,
 then judge_novelty). Both directions of the core reasoning test pass — see
 README.md and test_rvos_poc.py for how it works and how to run it.
 
-## Current increment (POC 2)
-Re-implement these same two agents using LangGraph for orchestration. Do not
-change the reasoning, add new agents, or add batch/multi-paper processing.
-The existing test suite must pass unchanged when this is done.
+## Completed increments
+- POC 1: the two-agent pipeline (extract_claim, judge_novelty) itself.
+- POC 2: re-implemented the same two agents' orchestration with LangGraph,
+  with no change to reasoning, no new agents, no batch/multi-paper
+  processing. The pre-existing test suite passed unchanged, and a
+  follow-up review fixed two defects found in that increment (missing
+  schema validation on `extract_claim`'s response, and the report's
+  related-work list not matching the verdict's citation numbers) -- see
+  "Known gotchas already fixed once" below and
+  `test_report_citation_numbers_match_related_work_list` in
+  `test_rvos_poc.py`.
+
+## Current increment
+None defined yet. Agree the next increment's scope here before starting
+new work -- the constraints above (no new agents, no batch processing)
+were specific to POC 2 and no longer automatically apply once a new
+increment is defined.
 
 ## What this is
 
@@ -65,7 +78,11 @@ Everything lives in `rvos_poc.py` as a straight-line pipeline, no classes:
 1. `extract_claim(paper_text)` — Agent 1. One Claude call that reads the raw
    paper text (truncated to the first 12k chars) and returns JSON: `claim`,
    `method`, `result`, `keywords`. Retries up to 3 times on `JSONDecodeError`
-   since the model occasionally returns malformed JSON (e.g. a bad escape).
+   since the model occasionally returns malformed JSON (e.g. a bad escape),
+   and also retries if the parsed JSON is well-formed but missing one of
+   the required keys (`REQUIRED_KEYS`) -- without this check a missing
+   `keywords` key crashed `_search_node` with a raw `KeyError` instead of
+   retrying.
 2. `search_openalex(keywords)` — not an LLM call. Queries the free OpenAlex
    API for related work using the extracted keywords, with retry/backoff on
    HTTP 429. Abstracts come back as an inverted index and are reconstructed
@@ -115,3 +132,10 @@ exist for this project.
   rate-limit tier.
 - Some source paper files aren't UTF-8; both `rvos_poc.run` and the test
   suite's `_read_paper` fall back to `cp1252` on `UnicodeDecodeError`.
+- `extract_claim` can return valid JSON that's still missing a required
+  key -- `REQUIRED_KEYS` must stay checked after `json.loads`, or a
+  missing key crashes `_search_node` instead of triggering a retry.
+- The report's related-work list and the verdict's `[n]` citations must
+  use the same index (both come from `enumerate(related_works)` in
+  `judge_novelty` and `run` respectively) -- don't reformat one without
+  the other, or the citations stop pointing at anything in the report.

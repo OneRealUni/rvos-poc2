@@ -20,7 +20,7 @@ Section 3.3).
 Both test files (`Docs/Test/Radha Tucci ISPIM25.txt` and
 `Docs/Test/Bocken.txt`, and their generated reports) are kept in
 `Docs/Test/` -- do not delete them. They are now the project's first
-regression test cases. (`Docs/Test/Tuxci.txt` also lives there; all
+regression test cases. (`Docs/Test/Tucci.txt` also lives there; all
 three are NDA content and excluded from git via `.gitignore`.)
 
 ## Corrections made since the original version
@@ -30,6 +30,22 @@ Claude Code CLI fixed three real gaps in the first draft:
 - OpenAlex occasionally rate-limits (HTTP 429) -- added retry with backoff
   and an optional `OPENALEX_MAILTO` for a better rate-limit tier
 - Some source files aren't UTF-8 -- added a `cp1252` fallback on read
+
+## Corrections made after POC2 (LangGraph re-implementation)
+
+A code review surfaced two more real gaps, both now fixed:
+- `extract_claim` could return well-formed JSON that was still missing a
+  required key (e.g. `keywords`), which crashed the search step with a
+  raw `KeyError` -- added a `REQUIRED_KEYS` check that retries instead
+- The report's "Related work retrieved" list was unnumbered, so the
+  `[1]`, `[2]`... citations in the novelty verdict had nothing to point
+  back to in the written report -- the list is now numbered with the
+  same indices the verdict cites
+
+Neither of these had a regression test guarding it; see
+`test_report_citation_numbers_match_related_work_list` in
+`test_rvos_poc.py`, which runs the pipeline end-to-end through `run()`
+and checks the two stay in sync.
 
 ## Setup (about 5 minutes)
 
