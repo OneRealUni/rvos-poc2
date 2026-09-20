@@ -1,0 +1,169 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 624f7cc..a8d97a7 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -13,10 +13,23 @@ This repo implements a validated 2-agent research-novelty POC (extract_claim,
+ then judge_novelty). Both directions of the core reasoning test pass — see
+ README.md and test_rvos_poc.py for how it works and how to run it.
+ 
+-## Current increment (POC 2)
+-Re-implement these same two agents using LangGraph for orchestration. Do not
+-change the reasoning, add new agents, or add batch/multi-paper processing.
+-The existing test suite must pass unchanged when this is done.
++## Completed increments
++- POC 1: the two-agent pipeline (extract_claim, judge_novelty) itself.
++- POC 2: re-implemented the same two agents' orchestration with LangGraph,
++  with no change to reasoning, no new agents, no batch/multi-paper
++  processing. The pre-existing test suite passed unchanged, and a
++  follow-up review fixed two defects found in that increment (missing
++  schema validation on `extract_claim`'s response, and the report's
++  related-work list not matching the verdict's citation numbers) -- see
++  "Known gotchas already fixed once" below and
++  `test_report_citation_numbers_match_related_work_list` in
++  `test_rvos_poc.py`.
++
++## Current increment
++None defined yet. Agree the next increment's scope here before starting
++new work -- the constraints above (no new agents, no batch processing)
++were specific to POC 2 and no longer automatically apply once a new
++increment is defined.
+ 
+ ## What this is
+ 
+@@ -65,7 +78,11 @@ Everything lives in `rvos_poc.py` as a straight-line pipeline, no classes:
+ 1. `extract_claim(paper_text)` — Agent 1. One Claude call that reads the raw
+    paper text (truncated to the first 12k chars) and returns JSON: `claim`,
+    `method`, `result`, `keywords`. Retries up to 3 times on `JSONDecodeError`
+-   since the model occasionally returns malformed JSON (e.g. a bad escape).
++   since the model occasionally returns malformed JSON (e.g. a bad escape),
++   and also retries if the parsed JSON is well-formed but missing one of
++   the required keys (`REQUIRED_KEYS`) -- without this check a missing
++   `keywords` key crashed `_search_node` with a raw `KeyError` instead of
++   retrying.
+ 2. `search_openalex(keywords)` — not an LLM call. Queries the free OpenAlex
+    API for related work using the extracted keywords, with retry/backoff on
+    HTTP 429. Abstracts come back as an inverted index and are reconstructed
+@@ -115,3 +132,10 @@ exist for this project.
+   rate-limit tier.
+ - Some source paper files aren't UTF-8; both `rvos_poc.run` and the test
+   suite's `_read_paper` fall back to `cp1252` on `UnicodeDecodeError`.
++- `extract_claim` can return valid JSON that's still missing a required
++  key -- `REQUIRED_KEYS` must stay checked after `json.loads`, or a
++  missing key crashes `_search_node` instead of triggering a retry.
++- The report's related-work list and the verdict's `[n]` citations must
++  use the same index (both come from `enumerate(related_works)` in
++  `judge_novelty` and `run` respectively) -- don't reformat one without
++  the other, or the citations stop pointing at anything in the report.
+diff --git a/README.md b/README.md
+index f441dd3..d49e663 100644
+--- a/README.md
++++ b/README.md
+@@ -20,7 +20,7 @@ Section 3.3).
+ Both test files (`Docs/Test/Radha Tucci ISPIM25.txt` and
+ `Docs/Test/Bocken.txt`, and their generated reports) are kept in
+ `Docs/Test/` -- do not delete them. They are now the project's first
+-regression test cases. (`Docs/Test/Tuxci.txt` also lives there; all
++regression test cases. (`Docs/Test/Tucci.txt` also lives there; all
+ three are NDA content and excluded from git via `.gitignore`.)
+ 
+ ## Corrections made since the original version
+@@ -31,6 +31,22 @@ Claude Code CLI fixed three real gaps in the first draft:
+   and an optional `OPENALEX_MAILTO` for a better rate-limit tier
+ - Some source files aren't UTF-8 -- added a `cp1252` fallback on read
+ 
++## Corrections made after POC2 (LangGraph re-implementation)
++
++A code review surfaced two more real gaps, both now fixed:
++- `extract_claim` could return well-formed JSON that was still missing a
++  required key (e.g. `keywords`), which crashed the search step with a
++  raw `KeyError` -- added a `REQUIRED_KEYS` check that retries instead
++- The report's "Related work retrieved" list was unnumbered, so the
++  `[1]`, `[2]`... citations in the novelty verdict had nothing to point
++  back to in the written report -- the list is now numbered with the
++  same indices the verdict cites
++
++Neither of these had a regression test guarding it; see
++`test_report_citation_numbers_match_related_work_list` in
++`test_rvos_poc.py`, which runs the pipeline end-to-end through `run()`
++and checks the two stay in sync.
++
+ ## Setup (about 5 minutes)
+ 
+ ```bash
+diff --git a/test_rvos_poc.py b/test_rvos_poc.py
+index 3b77dbe..56cf250 100644
+--- a/test_rvos_poc.py
++++ b/test_rvos_poc.py
+@@ -11,6 +11,11 @@ were originally verified by hand:
+   not flag direct overlap with retrieved work.
+ - Any overlap claim, in either verdict, must cite a specific numbered
+   source -- no vague unattributed claims.
++- The three properties above are checked against the agent functions
++  directly and never touch build_graph()/run(). A fourth test,
++  test_report_citation_numbers_match_related_work_list, runs the pipeline
++  end-to-end through run() instead, so the LangGraph wiring and the
++  written report file are both actually covered.
+ 
+ Requires ANTHROPIC_API_KEY in the environment (.env). Each run costs a
+ small amount (see README.md) and results can vary between runs since
+@@ -24,7 +29,7 @@ from pathlib import Path
+ 
+ import pytest
+ 
+-from rvos_poc import extract_claim, judge_novelty, search_openalex
++from rvos_poc import extract_claim, judge_novelty, run, search_openalex
+ 
+ BASE_DIR = Path(__file__).parent / "Docs" / "Test"
+ BOCKEN_PATH = BASE_DIR / "Bocken.txt"
+@@ -113,3 +118,51 @@ def test_overlap_claims_cite_a_numbered_source(bocken_verdict, ispim_verdict):
+                 assert re.search(r"\[\d+\]", paragraph), (
+                     f"Overlap claim without a numbered source citation: {paragraph!r}"
+                 )
++
++
++def test_report_citation_numbers_match_related_work_list(tmp_path):
++    """End-to-end regression test for the I2 defect (fixed in dea739d) and
++    for the LangGraph wiring itself.
++
++    The three tests above call extract_claim/search_openalex/judge_novelty
++    directly, so they never exercise build_graph() or run() -- meaning
++    neither the graph wiring nor the report file's numbering was covered by
++    any existing test. This test runs the real pipeline end-to-end via
++    run() and checks that every [n] the verdict cites actually appears in
++    the report's own numbered "Related work retrieved" list, so a
++    regression like I2 (verdict cites [2], report shows an unnumbered
++    bullet list) would fail here instead of shipping silently.
++
++    Writes into tmp_path rather than next to the tracked NDA fixture, since
++    run() writes its report beside whatever input path it's given.
++    """
++    paper_copy = tmp_path / "Bocken.txt"
++    paper_copy.write_text(_read_paper(BOCKEN_PATH), encoding="utf-8")
++
++    run(str(paper_copy))
++
++    report_path = tmp_path / "Bocken_report.md"
++    assert report_path.exists(), "run() did not write a report file"
++    report_text = report_path.read_text(encoding="utf-8")
++
++    assert "## Related work retrieved" in report_text, (
++        f"Report is missing the related-work section: {report_text!r}"
++    )
++    assert "## Novelty verdict" in report_text, (
++        f"Report is missing the verdict section: {report_text!r}"
++    )
++    related_section, verdict_section = report_text.split("## Novelty verdict", 1)
++
++    cited_numbers = {int(n) for n in re.findall(r"\[(\d+)\]", verdict_section)}
++    assert cited_numbers, (
++        f"Expected the verdict to cite at least one numbered source, got: "
++        f"{verdict_section!r}"
++    )
++
++    listed_numbers = {int(n) for n in re.findall(r"^\[(\d+)\]", related_section, re.MULTILINE)}
++    missing = cited_numbers - listed_numbers
++    assert not missing, (
++        f"Verdict cites source(s) {sorted(missing)} that don't appear in the "
++        f"report's numbered related-work list -- the two are out of sync "
++        f"again. Full report:\n{report_text}"
++    )
