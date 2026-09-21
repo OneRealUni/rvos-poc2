@@ -35,10 +35,17 @@ BASE_DIR = Path(__file__).parent / "Docs" / "Test"
 BOCKEN_PATH = BASE_DIR / "Bocken.txt"
 ISPIM_PATH = BASE_DIR / "Radha Tucci ISPIM25.txt"
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="ANTHROPIC_API_KEY not set -- these tests call the live Anthropic API",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not os.environ.get("ANTHROPIC_API_KEY"),
+        reason="ANTHROPIC_API_KEY not set -- these tests call the live Anthropic API",
+    ),
+    pytest.mark.skipif(
+        not (BOCKEN_PATH.exists() and ISPIM_PATH.exists()),
+        reason="NDA test fixtures not present locally -- these files are gitignored "
+        "and must be provided outside git (see README.md)",
+    ),
+]
 
 
 def _read_paper(path: Path) -> str:
@@ -89,9 +96,13 @@ def ispim_verdict():
 
 
 def test_bocken_flags_overlap_not_novel(bocken_verdict):
+    # A raw "overlap" in verdict_lower substring check also passes for
+    # "no overlap found" -- use the same affirmative-claim check the
+    # citation test already relies on, so a hedged/negated sentence
+    # can't accidentally satisfy this assertion.
     verdict_lower = bocken_verdict.lower()
-    assert "overlap" in verdict_lower, (
-        f"Expected Bocken verdict to flag overlap, got: {bocken_verdict!r}"
+    assert any(_asserts_overlap(s) for s in _sentences(bocken_verdict)), (
+        f"Expected Bocken verdict to affirmatively flag overlap, got: {bocken_verdict!r}"
     )
     assert not re.search(r"\b(appears|is)\s+novel\b", verdict_lower), (
         f"Bocken verdict should not conclude novelty, got: {bocken_verdict!r}"
